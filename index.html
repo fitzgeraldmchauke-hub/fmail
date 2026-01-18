@@ -125,15 +125,15 @@ video {
 import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 
 /* ---------- USERNAME ---------- */
-let username = prompt("Pick your display name:") || "User";
+let username = prompt("Pick your display name (this is your Peer ID):") || "User";
 
 /* ---------- PEER ---------- */
-const peer = new Peer(username); // peer id = username
+const peer = new Peer(username);
 let conn = null;
 let call = null;
 let localStream = null;
 
-/* ---------- FRIENDS SYSTEM (no saving) ---------- */
+/* ---------- FRIENDS SYSTEM ---------- */
 let friends = [];
 
 function renderFriends() {
@@ -149,13 +149,13 @@ function renderFriends() {
 }
 
 window.addFriend = () => {
-  const name = prompt("Enter friend's name:");
-  if (!name) return;
-  if (!friends.includes(name)) {
-    friends.push(name);
-    renderFriends();
-  }
+  const name = prompt("Enter friend's username (their peer ID):");
+  if (!name || friends.includes(name)) return;
+  friends.push(name);
+  renderFriends();
 };
+
+renderFriends();
 
 /* ---------- MEDIA ---------- */
 async function startMedia(video = true) {
@@ -191,23 +191,28 @@ peer.on("call", async incoming => {
 /* ---------- CALL ---------- */
 async function startCallTo(friendName) {
   if (!friendName) return;
+
+  // Data connection (chat)
   conn = peer.connect(friendName, { metadata: { name: username } });
+  conn.on("open", () => addMessage("System", `Connected to ${friendName}`, false));
   conn.on("data", d => {
     if (typeof d === "object" && d.user && d.text) {
       addMessage(d.user, d.text, false);
     }
   });
 
+  // Media call (video/audio)
   await startMedia(true);
   call = peer.call(friendName, localStream);
   call.on("stream", s => {
     document.getElementById("friendVideo").srcObject = s;
   });
+
   showVideos(true);
 }
 
 window.startCall = () => {
-  const friendName = prompt("Enter the name of the person to call:");
+  const friendName = prompt("Enter friend's username (peer ID):");
   if (!friendName) return;
   startCallTo(friendName);
 };
