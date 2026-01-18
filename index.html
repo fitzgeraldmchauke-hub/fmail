@@ -1,7 +1,3 @@
-
-<!DOCTYPE html>
-<html>
-<body>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -129,21 +125,16 @@ video {
 import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 
 /* ---------- USERNAME ---------- */
-let username = localStorage.getItem("fmail-username");
-if (!username || username === "null") {
-  username = prompt("Pick your display name:") || "User";
-  localStorage.setItem("fmail-username", username);
-}
+let username = prompt("Pick your display name:") || "User";
 
 /* ---------- PEER ---------- */
-const peer = new Peer(username); // make peer id = username
+const peer = new Peer(username); // peer id = username
 let conn = null;
 let call = null;
 let localStream = null;
 
-/* ---------- FRIENDS SYSTEM PER USER ---------- */
-let friendsKey = `fmail-friends-${username}`;
-let friends = JSON.parse(localStorage.getItem(friendsKey) || "[]");
+/* ---------- FRIENDS SYSTEM (no saving) ---------- */
+let friends = [];
 
 function renderFriends() {
   const container = document.getElementById("friends");
@@ -162,12 +153,9 @@ window.addFriend = () => {
   if (!name) return;
   if (!friends.includes(name)) {
     friends.push(name);
-    localStorage.setItem(friendsKey, JSON.stringify(friends));
     renderFriends();
   }
 };
-
-renderFriends();
 
 /* ---------- MEDIA ---------- */
 async function startMedia(video = true) {
@@ -185,7 +173,6 @@ function showVideos(show) {
 peer.on("connection", c => {
   conn = c;
   c.on("data", d => {
-    // FIX [object Object] issue
     if (typeof d === "object" && d.user && d.text) {
       addMessage(d.user, d.text, false);
     }
@@ -220,7 +207,7 @@ async function startCallTo(friendName) {
 }
 
 window.startCall = () => {
-  const friendName = prompt("Enter friend's name:");
+  const friendName = prompt("Enter the name of the person to call:");
   if (!friendName) return;
   startCallTo(friendName);
 };
@@ -260,9 +247,6 @@ document.getElementById("message").addEventListener("keydown", e => {
   if (e.key === "Enter") sendMessage();
 });
 </script>
-
-</body>
-</html>
 
 </body>
 </html>
