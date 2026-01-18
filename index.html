@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fmail Chat</title>
+<title>Fmail Chat - Linked Accounts</title>
 <style>
 body {
   font-family: 'Arial', sans-serif;
@@ -94,6 +94,10 @@ video {
   border-radius: 5px;
   cursor: pointer;
 }
+#session-code {
+  font-weight: bold;
+  margin-left: 10px;
+}
 </style>
 </head>
 <body>
@@ -124,8 +128,11 @@ video {
 <script type="module">
 import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 
-/* ---------- USERNAME ---------- */
-let username = prompt("Pick your display name (this is your Peer ID):") || "User";
+/* ---------- USER & SESSION ---------- */
+let username = prompt("Pick your username:") || "User";
+// Generate temporary session code
+let sessionCode = Math.random().toString(36).substring(2, 8);
+alert(`Your session code is: ${sessionCode}\nShare this with a friend to link accounts.`);
 
 /* ---------- PEER ---------- */
 const peer = new Peer(username);
@@ -142,17 +149,25 @@ function renderFriends() {
   friends.forEach(friend => {
     const btn = document.createElement("button");
     btn.className = "friend-btn";
-    btn.textContent = friend;
-    btn.onclick = () => startCallTo(friend);
+    btn.textContent = friend.username;
+    btn.onclick = () => startCallTo(friend.username);
     container.appendChild(btn);
   });
 }
 
 window.addFriend = () => {
-  const name = prompt("Enter friend's username (their peer ID):");
-  if (!name || friends.includes(name)) return;
-  friends.push(name);
-  renderFriends();
+  const code = prompt("Enter your friend's session code:");
+  if (!code) return;
+
+  // simulate linking using JS map
+  const friendName = prompt("Enter your friend's username (peer ID):");
+  if (!friendName) return;
+
+  if (!friends.find(f => f.sessionCode === code)) {
+    friends.push({ username: friendName, sessionCode: code });
+    renderFriends();
+    alert(`Friend ${friendName} linked!`);
+  }
 };
 
 renderFriends();
@@ -192,7 +207,7 @@ peer.on("call", async incoming => {
 async function startCallTo(friendName) {
   if (!friendName) return;
 
-  // Data connection (chat)
+  // Data connection
   conn = peer.connect(friendName, { metadata: { name: username } });
   conn.on("open", () => addMessage("System", `Connected to ${friendName}`, false));
   conn.on("data", d => {
@@ -201,7 +216,7 @@ async function startCallTo(friendName) {
     }
   });
 
-  // Media call (video/audio)
+  // Media connection
   await startMedia(true);
   call = peer.call(friendName, localStream);
   call.on("stream", s => {
