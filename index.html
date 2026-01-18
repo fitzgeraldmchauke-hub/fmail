@@ -1,0 +1,268 @@
+
+<!DOCTYPE html>
+<html>
+<body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fmail Chat</title>
+<style>
+body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  background: #f1f3f4;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+header {
+  background: #1a73e8;
+  color: white;
+  padding: 20px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  gap: 10px;
+}
+.message {
+  background: white;
+  padding: 10px 15px;
+  border-radius: 15px;
+  max-width: 70%;
+  word-wrap: break-word;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.message.user {
+  align-self: flex-end;
+  background: #dcf8c6;
+}
+#input-area {
+  display: flex;
+  padding: 10px 20px;
+  background: #fff;
+  border-top: 1px solid #ddd;
+}
+#message {
+  flex: 1;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  outline: none;
+  font-size: 1rem;
+  margin-right: 10px;
+}
+button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background: #1a73e8;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+#videos {
+  display: none;
+  background: black;
+  padding: 10px;
+  gap: 10px;
+  justify-content: center;
+}
+video {
+  width: 45%;
+  border-radius: 10px;
+}
+#friends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 20px;
+  background: #fff;
+  border-top: 1px solid #ddd;
+}
+.friend-btn {
+  padding: 5px 10px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<header>
+  Fmail Chat
+  <div>
+    <button onclick="startCall()">📞 Call</button>
+    <button onclick="endCall()">❌ End Call</button>
+    <button onclick="addFriend()">➕ Friend</button>
+  </div>
+</header>
+
+<div id="videos">
+  <video id="myVideo" autoplay muted></video>
+  <video id="friendVideo" autoplay></video>
+</div>
+
+<div id="chat-container"></div>
+
+<div id="friends"></div>
+
+<div id="input-area">
+  <input id="message" placeholder="Type a message..." />
+  <button onclick="sendMessage()">Send</button>
+</div>
+
+<script type="module">
+import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
+
+/* ---------- USERNAME ---------- */
+let username = localStorage.getItem("fmail-username");
+if (!username || username === "null") {
+  username = prompt("Pick your display name:") || "User";
+  localStorage.setItem("fmail-username", username);
+}
+
+/* ---------- PEER ---------- */
+const peer = new Peer(username); // make peer id = username
+let conn = null;
+let call = null;
+let localStream = null;
+
+/* ---------- FRIENDS SYSTEM PER USER ---------- */
+let friendsKey = `fmail-friends-${username}`;
+let friends = JSON.parse(localStorage.getItem(friendsKey) || "[]");
+
+function renderFriends() {
+  const container = document.getElementById("friends");
+  container.innerHTML = "";
+  friends.forEach(friend => {
+    const btn = document.createElement("button");
+    btn.className = "friend-btn";
+    btn.textContent = friend;
+    btn.onclick = () => startCallTo(friend);
+    container.appendChild(btn);
+  });
+}
+
+window.addFriend = () => {
+  const name = prompt("Enter friend's name:");
+  if (!name) return;
+  if (!friends.includes(name)) {
+    friends.push(name);
+    localStorage.setItem(friendsKey, JSON.stringify(friends));
+    renderFriends();
+  }
+};
+
+renderFriends();
+
+/* ---------- MEDIA ---------- */
+async function startMedia(video = true) {
+  if (!localStream) {
+    localStream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+    document.getElementById("myVideo").srcObject = localStream;
+  }
+}
+
+function showVideos(show) {
+  document.getElementById("videos").style.display = show ? "flex" : "none";
+}
+
+/* ---------- CONNECTIONS ---------- */
+peer.on("connection", c => {
+  conn = c;
+  c.on("data", d => {
+    // FIX [object Object] issue
+    if (typeof d === "object" && d.user && d.text) {
+      addMessage(d.user, d.text, false);
+    }
+  });
+});
+
+peer.on("call", async incoming => {
+  await startMedia(true);
+  incoming.answer(localStream);
+  showVideos(true);
+  incoming.on("stream", s => {
+    document.getElementById("friendVideo").srcObject = s;
+  });
+});
+
+/* ---------- CALL ---------- */
+async function startCallTo(friendName) {
+  if (!friendName) return;
+  conn = peer.connect(friendName, { metadata: { name: username } });
+  conn.on("data", d => {
+    if (typeof d === "object" && d.user && d.text) {
+      addMessage(d.user, d.text, false);
+    }
+  });
+
+  await startMedia(true);
+  call = peer.call(friendName, localStream);
+  call.on("stream", s => {
+    document.getElementById("friendVideo").srcObject = s;
+  });
+  showVideos(true);
+}
+
+window.startCall = () => {
+  const friendName = prompt("Enter friend's name:");
+  if (!friendName) return;
+  startCallTo(friendName);
+};
+
+/* ---------- END CALL ---------- */
+window.endCall = () => {
+  if (call) call.close();
+  if (conn) conn.close();
+  if (localStream) localStream.getTracks().forEach(track => track.stop());
+  call = null;
+  conn = null;
+  localStream = null;
+  showVideos(false);
+};
+
+/* ---------- CHAT ---------- */
+window.sendMessage = () => {
+  const input = document.getElementById("message");
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (conn) conn.send({ user: username, text });
+  addMessage(username, text, true);
+  input.value = "";
+};
+
+function addMessage(user, text, mine) {
+  const div = document.createElement("div");
+  div.className = "message" + (mine ? " user" : "");
+  div.innerHTML = `<b>${user}:</b> ${text}`;
+  document.getElementById("chat-container").appendChild(div);
+  document.getElementById("chat-container").scrollTop = document.getElementById("chat-container").scrollHeight;
+}
+
+/* ---------- ENTER KEY SEND ---------- */
+document.getElementById("message").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendMessage();
+});
+</script>
+
+</body>
+</html>
+
+</body>
+</html>
