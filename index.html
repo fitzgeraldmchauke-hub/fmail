@@ -80,10 +80,15 @@ window.addFriend = async () => {
   if(!name || isFriend(name)) return;
 
   try {
-     ("friends/addFriend", { user: username, friend: name });
+    await convex.mutation("friends/addFriend", { user: username, friend: name });
     friends.push(name);
     renderFriends();
-    addMessage("System", `Added friend ${name}`,
+    addMessage("System", `Added friend ${name}`, false);
+  } catch (err){
+    console.error("Add friend failed:", err);
+    alert("Failed to add friend. Check console.");
+  }
+};
 
 // ---------- MESSAGES ----------
 let messageSubscription = null;
