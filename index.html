@@ -1,11 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fmail Chat - Convex</title>
-
+<link rel="icon" type="image/png" href="favi.png">
 <style>
 body { font-family: Arial,sans-serif; margin:0; background:#f1f3f4; display:flex; flex-direction:column; height:100vh; }
 header { background:#1a73e8; color:white; padding:20px; font-size:1.5rem; font-weight:bold; display:flex; justify-content:space-between; align-items:center; }
@@ -42,7 +41,7 @@ video { width:45%; border-radius:10px; }
 <div id="friends"></div>
 
 <div id="input-area">
-  <input id="message" placeholder="Type a message..." />
+  <textarea id="message" placeholder="Type a message..."></textarea>
   <button onclick="sendMessage()">Send</button>
 </div>
 
@@ -62,7 +61,7 @@ function isFriend(name){ return friends.includes(name); }
 
 function renderFriends(){
   const container = document.getElementById("friends");
-  container.innerHTML = "";
+  container.innerHTML="";
   friends.forEach(name=>{
     const btn = document.createElement("button");
     btn.className="friend-btn";
@@ -79,9 +78,16 @@ function renderFriends(){
 window.addFriend = async () => {
   const name = prompt("Enter friend's username (peer ID):");
   if(!name || isFriend(name)) return;
-  friends.push(name);
-  renderFriends();
-  await convex.mutation("friends/addFriend", { user: username, friend: name });
+
+  try {
+    await convex.mutation("friends/addFriend", { user: username, friend: name });
+    friends.push(name);
+    renderFriends();
+    addMessage("System", `Added friend ${name}`, false);
+  } catch (err){
+    console.error("Add friend failed:", err);
+    alert("Failed to add friend. Check console.");
+  }
 };
 
 // ---------- MESSAGES ----------
@@ -91,13 +97,19 @@ async function sendMessage(){
   const input = document.getElementById("message");
   const text = input.value.trim();
   if(!text || !currentFriend){ alert("Select a friend first."); return; }
-  await convex.mutation("messages/send", { sender: username, receiver: currentFriend, text });
-  addMessage(username, text, true);
-  input.value="";
+
+  try {
+    await convex.mutation("messages/send", { sender: username, receiver: currentFriend, text });
+    addMessage(username, text, true);
+    input.value="";
+  } catch (err){
+    console.error("Send failed:", err);
+    alert("Failed to send message. Check console.");
+  }
 }
 
 async function subscribeMessages(friend){
-  if(messageSubscription) messageSubscription.unsubscribe();
+  if(messageSubscription) messageSubscription.unsubscribe?.();
   messageSubscription = convex.query("messages/listForUser", { user: username }).subscribe(msgs=>{
     const chatContainer = document.getElementById("chat-container");
     chatContainer.innerHTML="";
@@ -115,8 +127,7 @@ function addMessage(user, text, mine){
   document.getElementById("chat-container").scrollTop=document.getElementById("chat-container").scrollHeight;
 }
 
-// ---------- CALL (optional) ----------
-let call = null;
+// ---------- CALL (placeholder) ----------
 let localStream = null;
 
 async function startMedia(){
@@ -129,8 +140,7 @@ async function startMedia(){
 window.startCall = async ()=>{
   if(!currentFriend){ alert("Select a friend first."); return; }
   await startMedia();
-  // You can implement WebRTC video calls here
-  alert("Video call placeholder (Convex handles messaging only)");
+  alert("Video call placeholder. Convex handles messaging only.");
   document.getElementById("videos").style.display="flex";
 };
 
@@ -139,8 +149,12 @@ window.endCall = ()=>{
   document.getElementById("videos").style.display="none";
 };
 
+// ---------- ENTER KEY SEND ----------
 document.getElementById("message").addEventListener("keydown", e=>{
-  if(e.key==="Enter") sendMessage();
+  if(e.key==="Enter" && !e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
 });
 </script>
 
