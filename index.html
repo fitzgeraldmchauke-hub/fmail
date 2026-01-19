@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fmail Chat - Convex</title>
-<link rel="icon" type="image/png" href="favi.png">
+<title>Fmail Chat - Convex + PeerJS</title>
 <style>
 body { font-family: Arial,sans-serif; margin:0; background:#f1f3f4; display:flex; flex-direction:column; height:100vh; }
 header { background:#1a73e8; color:white; padding:20px; font-size:1.5rem; font-weight:bold; display:flex; justify-content:space-between; align-items:center; }
@@ -20,7 +19,6 @@ video { width:45%; border-radius:10px; }
 .friend-btn { padding:5px 10px; background:#1a73e8; color:white; border:none; border-radius:5px; cursor:pointer; }
 </style>
 </head>
-
 <body>
 
 <header>
@@ -41,91 +39,119 @@ video { width:45%; border-radius:10px; }
 <div id="friends"></div>
 
 <div id="input-area">
-  <textarea id="message" placeholder="Type a message..."></textarea>
+  <input id="message" placeholder="Type a message..." />
   <button onclick="sendMessage()">Send</button>
 </div>
 
 <script type="module">
+import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 import { ConvexClient } from "https://esm.sh/convex/browser";
 
-const convex = new ConvexClient("https://brainy-peacock-656.convex.cloud"); // Replace with your deployment URL
-
+// ------------------- Convex -------------------
+const convex = new ConvexClient("https://brainy-peacock-656.convex.cloud"); // replace with your URL
 let username = prompt("Pick your username:") || "User";
 let friends = [];
 let currentFriend = null;
 
-function renderFriends(){
+// Load friends from Convex
+async function loadFriends() {
+  const result = await convex.query("friends/listFriends", { user: username });
+  friends = result.map(f => f.friend);
+  renderFriends();
+}
+
+function renderFriends() {
   const container = document.getElementById("friends");
   container.innerHTML = "";
-  friends.forEach(name=>{
+  friends.forEach(name => {
     const btn = document.createElement("button");
     btn.className = "friend-btn";
     btn.textContent = name;
-    btn.onclick = ()=>{
-      currentFriend = name;
-      addMessage("System", `Selected ${name}`, false);
-      subscribeMessages(name);
-    };
+    btn.onclick = () => currentFriend = name;
     container.appendChild(btn);
   });
 }
 
-async function loadFriends(){
-  try{
-    const result = await convex.query("friends/listFriends", { user: username });
-    friends = result.map(f => f.friend);
-    renderFriends();
-  } catch(err){
-    console.error("Failed to load friends:", err);
-  }
-}
-loadFriends();
-
-window.addFriend = async ()=>{
-  const name = prompt("Enter friend's username (peer ID):");
-  if(!name || friends.includes(name)) return;
-  try{
-    await convex.mutation("friends/addFriend", { user: username, friend: name });
-    friends.push(name);
-    renderFriends();
-    addMessage("System", `Added friend ${name}`, false);
-  } catch(err){
-    console.error("Add friend failed:", err);
-    alert("Failed to add friend. Check console.");
-  }
+// Add friend via Convex
+window.addFriend = async () => {
+  const name = prompt("Enter friend's username:");
+  if (!name || friends.includes(name)) return;
+  await convex.mutation("friends/addFriend", { user: username, friend: name });
+  friends.push(name);
+  renderFriends();
 };
 
-let messageSubscription = null;
+// ------------------- PeerJS -------------------
+const peer = new Peer(username);
+let conn = null;
+let call = null;
+let localStream = null;
 
-async function sendMessage(){
-  const input = document.getElementById("message");
-  const text = input.value.trim();
-  if(!text || !currentFriend){ alert("Select a friend first."); return; }
-  try{
-    await convex.mutation("messages/send", { sender: username, receiver: currentFriend, text });
-    addMessage(username, text, true);
-    input.value="";
-  } catch(err){
-    console.error("Send failed:", err);
-    alert("Failed to send message. Check console.");
+function isFriend(name) { return friends.includes(name); }
+
+async function startMedia() {
+  if (!localStream) {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById("myVideo").srcObject = localStream;
   }
 }
 
-async function subscribeMessages(){
-  if(messageSubscription) messageSubscription.unsubscribe?.();
-  messageSubscription = convex.query("messages/listForUser", { user: username }).subscribe(msgs=>{
-    const chatContainer = document.getElementById("chat-container");
-    chatContainer.innerHTML = "";
-    msgs.forEach(m=>{
-      if(m.sender===currentFriend || m.receiver===currentFriend){
-        const displayUser = m.sender === username ? username : m.sender;
-        addMessage(displayUser, m.text, m.sender===username);
-      }
-    });
-  });
+function showVideos(show) {
+  document.getElementById("videos").style.display = show ? "flex" : "none";
 }
 
-function addMessage(user, text, mine){
+// PeerJS incoming connection
+peer.on("connection", c => {
+  if (!isFriend(c.peer)) return c.close();
+  conn = c;
+  conn.on("data", d => addMessage(d.user, d.text, false));
+});
+
+// PeerJS incoming call
+peer.on("call", async incoming => {
+  if (!isFriend(incoming.peer)) return incoming.close();
+  currentFriend = incoming.peer;
+  await startMedia();
+  incoming.answer(localStream);
+  showVideos(true);
+  incoming.on("stream", s => document.getElementById("friendVideo").srcObject = s);
+});
+
+// Start a call
+window.startCall = async () => {
+  if (!currentFriend) return;
+  await startMedia();
+  call = peer.call(currentFriend, localStream);
+  call.on("stream", s => document.getElementById("friendVideo").srcObject = s);
+  showVideos(true);
+};
+
+// End call
+window.endCall = () => {
+  if (call) call.close();
+  call = null;
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  showVideos(false);
+};
+
+// Send chat message
+window.sendMessage = () => {
+  const input = document.getElementById("message");
+  const text = input.value.trim();
+  if (!text || !currentFriend) return;
+
+  if (!conn || conn.peer !== currentFriend || !conn.open) {
+    conn = peer.connect(currentFriend);
+    conn.on("data", d => addMessage(d.user, d.text, false));
+  }
+
+  conn.send({ user: username, text });
+  addMessage(username, text, true);
+  input.value = "";
+};
+
+// Add message to chat
+function addMessage(user, text, mine) {
   const div = document.createElement("div");
   div.className = "message" + (mine ? " user" : "");
   div.innerHTML = `<b>${user}:</b> ${text}`;
@@ -134,26 +160,11 @@ function addMessage(user, text, mine){
   container.scrollTop = container.scrollHeight;
 }
 
-let localStream = null;
-async function startMedia(){
-  if(!localStream){
-    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-    document.getElementById("myVideo").srcObject = localStream;
-  }
-}
-window.startCall = async ()=>{
-  if(!currentFriend){ alert("Select a friend first."); return; }
-  await startMedia();
-  alert("Video call placeholder. Convex handles messaging only.");
-  document.getElementById("videos").style.display = "flex";
-};
-window.endCall = ()=>{
-  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
-  document.getElementById("videos").style.display = "none";
-};
-document.getElementById("message").addEventListener("keydown", e=>{
-  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+document.getElementById("message").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendMessage();
 });
+
+loadFriends();
 </script>
 
 </body>
