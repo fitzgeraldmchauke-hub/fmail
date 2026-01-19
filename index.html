@@ -3,115 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fmail Chat - Linked Accounts</title>
+<title>Fmail Chat - Convex</title>
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  background: #f1f3f4;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-
-header {
-  background: #1a73e8;
-  color: white;
-  padding: 20px;
-  font-size: 1.5rem;
-  font-weight: bold;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-#chat-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  overflow-y: auto;
-  gap: 10px;
-}
-
-/* ✅ FIXED MESSAGE TEXT UI */
-.message {
-  background: white;
-  padding: 10px 15px;
-  border-radius: 15px;
-  max-width: 85%;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
-  line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.message.user {
-  align-self: flex-end;
-  background: #dcf8c6;
-}
-
-#input-area {
-  display: flex;
-  padding: 10px 20px;
-  background: #fff;
-  border-top: 1px solid #ddd;
-}
-
-/* ✅ FIXED INPUT TEXT FEEL */
-#message {
-  flex: 1;
-  padding: 12px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  outline: none;
-  font-size: 1rem;
-  line-height: 1.4;
-  margin-right: 10px;
-}
-
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 5px;
-  background: #1a73e8;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-#videos {
-  display: none;
-  background: black;
-  padding: 10px;
-  gap: 10px;
-  justify-content: center;
-}
-
-video {
-  width: 45%;
-  border-radius: 10px;
-}
-
-#friends {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 10px 20px;
-  background: #fff;
-  border-top: 1px solid #ddd;
-}
-
-.friend-btn {
-  padding: 5px 10px;
-  background: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
+body { font-family: Arial,sans-serif; margin:0; background:#f1f3f4; display:flex; flex-direction:column; height:100vh; }
+header { background:#1a73e8; color:white; padding:20px; font-size:1.5rem; font-weight:bold; display:flex; justify-content:space-between; align-items:center; }
+#chat-container { flex:1; display:flex; flex-direction:column; padding:20px; overflow-y:auto; gap:10px; }
+.message { background:white; padding:10px 15px; border-radius:15px; max-width:85%; word-wrap:break-word; overflow-wrap:break-word; white-space:pre-wrap; line-height:1.4; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+.message.user { align-self:flex-end; background:#dcf8c6; }
+#input-area { display:flex; padding:10px 20px; background:#fff; border-top:1px solid #ddd; }
+#message { flex:1; padding:12px; border-radius:5px; border:1px solid #ccc; outline:none; font-size:1rem; line-height:1.4; margin-right:10px; }
+button { padding:10px 20px; border:none; border-radius:5px; background:#1a73e8; color:white; font-weight:bold; cursor:pointer; }
+#videos { display:none; background:black; padding:10px; gap:10px; justify-content:center; }
+video { width:45%; border-radius:10px; }
+#friends { display:flex; flex-wrap:wrap; gap:5px; padding:10px 20px; background:#fff; border-top:1px solid #ddd; }
+.friend-btn { padding:5px 10px; background:#1a73e8; color:white; border:none; border-radius:5px; cursor:pointer; }
 </style>
 </head>
 
@@ -140,155 +46,100 @@ video {
 </div>
 
 <script type="module">
-import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
+import { ConvexClient } from "https://esm.sh/convex/browser";
 
-/* ---------- USER ---------- */
+const convex = new ConvexClient("https://brainy-peacock-656.convex.cloud");
+
+// ---------- USER ----------
 let username = prompt("Pick your username:") || "User";
 
-/* ---------- PEER ---------- */
-const peer = new Peer(username);
-let conn = null;
-let call = null;
-let localStream = null;
+// ---------- FRIENDS ----------
+let friends = [];
 let currentFriend = null;
 
-/* ---------- FRIENDS ---------- */
-let friends = [];
+function isFriend(name){ return friends.includes(name); }
 
-function isFriend(name) {
-  return friends.includes(name);
-}
-
-function renderFriends() {
+function renderFriends(){
   const container = document.getElementById("friends");
   container.innerHTML = "";
-  friends.forEach(name => {
+  friends.forEach(name=>{
     const btn = document.createElement("button");
-    btn.className = "friend-btn";
-    btn.textContent = name;
-    btn.onclick = () => {
-      currentFriend = name;
+    btn.className="friend-btn";
+    btn.textContent=name;
+    btn.onclick = ()=> {
+      currentFriend=name;
       addMessage("System", `Selected ${name}`, false);
+      subscribeMessages(name);
     };
     container.appendChild(btn);
   });
 }
 
-window.addFriend = () => {
+window.addFriend = async () => {
   const name = prompt("Enter friend's username (peer ID):");
-  if (!name || isFriend(name)) return;
+  if(!name || isFriend(name)) return;
   friends.push(name);
   renderFriends();
+  await convex.mutation("friends/addFriend", { user: username, friend: name });
 };
 
-/* ---------- MEDIA ---------- */
-async function startMedia() {
-  if (!localStream) {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    document.getElementById("myVideo").srcObject = localStream;
-  }
-}
+// ---------- MESSAGES ----------
+let messageSubscription = null;
 
-function showVideos(show) {
-  document.getElementById("videos").style.display = show ? "flex" : "none";
-}
-
-/* ---------- CONNECTIONS ---------- */
-peer.on("connection", c => {
-  if (!isFriend(c.peer)) {
-    c.close();
-    return;
-  }
-
-  conn = c;
-  currentFriend = c.peer;
-
-  c.on("data", d => {
-    addMessage(d.user, d.text, false);
-  });
-});
-
-peer.on("call", async incoming => {
-  if (!isFriend(incoming.peer)) {
-    incoming.close();
-    return;
-  }
-
-  currentFriend = incoming.peer;
-  await startMedia();
-  incoming.answer(localStream);
-  showVideos(true);
-
-  incoming.on("stream", s => {
-    document.getElementById("friendVideo").srcObject = s;
-  });
-});
-
-/* ---------- CALL ---------- */
-window.startCall = async () => {
-  if (!currentFriend) {
-    alert("Select a friend first.");
-    return;
-  }
-
-  await startMedia();
-  call = peer.call(currentFriend, localStream);
-
-  call.on("stream", s => {
-    document.getElementById("friendVideo").srcObject = s;
-  });
-
-  showVideos(true);
-};
-
-window.endCall = () => {
-  if (call) call.close();
-  call = null;
-
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-  }
-
-  showVideos(false);
-};
-
-/* ---------- CHAT (FIXED) ---------- */
-window.sendMessage = () => {
+async function sendMessage(){
   const input = document.getElementById("message");
   const text = input.value.trim();
-  if (!text) return;
-
-  if (!currentFriend || !isFriend(currentFriend)) {
-    alert("Select a friend first.");
-    return;
-  }
-
-  // auto-connect data channel if needed
-  if (!conn || conn.peer !== currentFriend || !conn.open) {
-    conn = peer.connect(currentFriend);
-    conn.on("data", d => {
-      addMessage(d.user, d.text, false);
-    });
-  }
-
-  conn.send({ user: username, text });
+  if(!text || !currentFriend){ alert("Select a friend first."); return; }
+  await convex.mutation("messages/send", { sender: username, receiver: currentFriend, text });
   addMessage(username, text, true);
-  input.value = "";
-};
-
-function addMessage(user, text, mine) {
-  const div = document.createElement("div");
-  div.className = "message" + (mine ? " user" : "");
-  div.innerHTML = `<b>${user}:</b> ${text}`;
-  document.getElementById("chat-container").appendChild(div);
-  document.getElementById("chat-container").scrollTop =
-    document.getElementById("chat-container").scrollHeight;
+  input.value="";
 }
 
-/* ---------- ENTER ---------- */
-document.getElementById("message").addEventListener("keydown", e => {
-  if (e.key === "Enter") sendMessage();
+async function subscribeMessages(friend){
+  if(messageSubscription) messageSubscription.unsubscribe();
+  messageSubscription = convex.query("messages/listForUser", { user: username }).subscribe(msgs=>{
+    const chatContainer = document.getElementById("chat-container");
+    chatContainer.innerHTML="";
+    msgs.forEach(m=>{
+      addMessage(m.sender, m.text, m.sender===username);
+    });
+  });
+}
+
+function addMessage(user, text, mine){
+  const div = document.createElement("div");
+  div.className="message"+(mine?" user":"");
+  div.innerHTML=`<b>${user}:</b> ${text}`;
+  document.getElementById("chat-container").appendChild(div);
+  document.getElementById("chat-container").scrollTop=document.getElementById("chat-container").scrollHeight;
+}
+
+// ---------- CALL (optional) ----------
+let call = null;
+let localStream = null;
+
+async function startMedia(){
+  if(!localStream){
+    localStream = await navigator.mediaDevices.getUserMedia({ video:true,audio:true });
+    document.getElementById("myVideo").srcObject=localStream;
+  }
+}
+
+window.startCall = async ()=>{
+  if(!currentFriend){ alert("Select a friend first."); return; }
+  await startMedia();
+  // You can implement WebRTC video calls here
+  alert("Video call placeholder (Convex handles messaging only)");
+  document.getElementById("videos").style.display="flex";
+};
+
+window.endCall = ()=>{
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  document.getElementById("videos").style.display="none";
+};
+
+document.getElementById("message").addEventListener("keydown", e=>{
+  if(e.key==="Enter") sendMessage();
 });
 </script>
 
