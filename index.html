@@ -80,7 +80,7 @@ window.addFriend = async () => {
   if(!name || isFriend(name)) return;
 
   try {
-    await convex.mutation("friends/addFriend", { user: username, friend: name });
+     ("friends/addFriend", { user: username, friend: name });
     friends.push(name);
     renderFriends();
     addMessage("System", `Added friend ${name}`,
