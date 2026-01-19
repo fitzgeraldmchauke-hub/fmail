@@ -130,7 +130,6 @@ import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 
 /* ---------- USER & SESSION ---------- */
 let username = prompt("Pick your username:") || "User";
-// Generate temporary session code
 let sessionCode = Math.random().toString(36).substring(2, 8);
 alert(`Your session code is: ${sessionCode}\nShare this with a friend to link accounts.`);
 
@@ -142,6 +141,10 @@ let localStream = null;
 
 /* ---------- FRIENDS SYSTEM ---------- */
 let friends = [];
+
+function isFriend(name) {
+  return friends.some(f => f.username === name);
+}
 
 function renderFriends() {
   const container = document.getElementById("friends");
@@ -159,7 +162,6 @@ window.addFriend = () => {
   const code = prompt("Enter your friend's session code:");
   if (!code) return;
 
-  // simulate linking using JS map
   const friendName = prompt("Enter your friend's username (peer ID):");
   if (!friendName) return;
 
@@ -186,6 +188,11 @@ function showVideos(show) {
 
 /* ---------- CONNECTIONS ---------- */
 peer.on("connection", c => {
+  if (!isFriend(c.peer)) {
+    c.close();
+    return;
+  }
+
   conn = c;
   c.on("data", d => {
     if (typeof d === "object" && d.user && d.text) {
@@ -195,9 +202,15 @@ peer.on("connection", c => {
 });
 
 peer.on("call", async incoming => {
+  if (!isFriend(incoming.peer)) {
+    incoming.close();
+    return;
+  }
+
   await startMedia(true);
   incoming.answer(localStream);
   showVideos(true);
+
   incoming.on("stream", s => {
     document.getElementById("friendVideo").srcObject = s;
   });
@@ -205,18 +218,23 @@ peer.on("call", async incoming => {
 
 /* ---------- CALL ---------- */
 async function startCallTo(friendName) {
-  if (!friendName) return;
+  if (!isFriend(friendName)) {
+    alert("You can only message or call friends.");
+    return;
+  }
 
-  // Data connection
   conn = peer.connect(friendName, { metadata: { name: username } });
-  conn.on("open", () => addMessage("System", `Connected to ${friendName}`, false));
+
+  conn.on("open", () => {
+    addMessage("System", `Connected to ${friendName}`, false);
+  });
+
   conn.on("data", d => {
     if (typeof d === "object" && d.user && d.text) {
       addMessage(d.user, d.text, false);
     }
   });
 
-  // Media connection
   await startMedia(true);
   call = peer.call(friendName, localStream);
   call.on("stream", s => {
@@ -249,7 +267,12 @@ window.sendMessage = () => {
   const text = input.value.trim();
   if (!text) return;
 
-  if (conn) conn.send({ user: username, text });
+  if (!conn || !isFriend(conn.peer)) {
+    alert("You can only message friends.");
+    return;
+  }
+
+  conn.send({ user: username, text });
   addMessage(username, text, true);
   input.value = "";
 };
@@ -259,7 +282,8 @@ function addMessage(user, text, mine) {
   div.className = "message" + (mine ? " user" : "");
   div.innerHTML = `<b>${user}:</b> ${text}`;
   document.getElementById("chat-container").appendChild(div);
-  document.getElementById("chat-container").scrollTop = document.getElementById("chat-container").scrollHeight;
+  document.getElementById("chat-container").scrollTop =
+    document.getElementById("chat-container").scrollHeight;
 }
 
 /* ---------- ENTER KEY SEND ---------- */
