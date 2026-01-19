@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fmail Chat - Linked Accounts</title>
+<title>Fmail Chat</title>
+
 <style>
 body {
-  font-family: 'Arial', sans-serif;
+  font-family: Arial, sans-serif;
   margin: 0;
   background: #f1f3f4;
   display: flex;
@@ -16,52 +17,60 @@ body {
 header {
   background: #1a73e8;
   color: white;
-  padding: 20px;
-  font-size: 1.5rem;
+  padding: 15px;
+  font-size: 1.4rem;
   font-weight: bold;
   display: flex;
   justify-content: space-between;
-  align-items: center;
 }
 #chat-container {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   padding: 20px;
   overflow-y: auto;
-  gap: 10px;
 }
 .message {
   background: white;
-  padding: 10px 15px;
-  border-radius: 15px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  margin-bottom: 10px;
   max-width: 70%;
-  word-wrap: break-word;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 .message.user {
-  align-self: flex-end;
   background: #dcf8c6;
+  margin-left: auto;
+}
+#friends {
+  display: flex;
+  gap: 5px;
+  padding: 10px;
+  background: white;
+  border-top: 1px solid #ddd;
+}
+.friend-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #1a73e8;
+  color: white;
+  cursor: pointer;
+}
+.friend-btn.active {
+  background: #174ea6;
 }
 #input-area {
   display: flex;
-  padding: 10px 20px;
-  background: #fff;
+  padding: 10px;
+  background: white;
   border-top: 1px solid #ddd;
 }
 #message {
   flex: 1;
   padding: 10px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  outline: none;
   font-size: 1rem;
-  margin-right: 10px;
 }
 button {
-  padding: 10px 20px;
+  padding: 10px 15px;
   border: none;
-  border-radius: 5px;
   background: #1a73e8;
   color: white;
   font-weight: bold;
@@ -72,41 +81,21 @@ button {
   background: black;
   padding: 10px;
   gap: 10px;
-  justify-content: center;
 }
 video {
-  width: 45%;
-  border-radius: 10px;
-}
-#friends {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 10px 20px;
-  background: #fff;
-  border-top: 1px solid #ddd;
-}
-.friend-btn {
-  padding: 5px 10px;
-  background: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-#session-code {
-  font-weight: bold;
-  margin-left: 10px;
+  width: 48%;
+  border-radius: 8px;
 }
 </style>
 </head>
+
 <body>
 
 <header>
-  Fmail Chat
+  Fmail
   <div>
     <button onclick="startCall()">📞 Call</button>
-    <button onclick="endCall()">❌ End Call</button>
+    <button onclick="endCall()">❌ End</button>
     <button onclick="addFriend()">➕ Friend</button>
   </div>
 </header>
@@ -117,7 +106,6 @@ video {
 </div>
 
 <div id="chat-container"></div>
-
 <div id="friends"></div>
 
 <div id="input-area">
@@ -128,76 +116,65 @@ video {
 <script type="module">
 import { Peer } from "https://esm.sh/peerjs@1.5.5?bundle-deps";
 
-/* ---------- USER & SESSION ---------- */
-let username = prompt("Pick your username:") || "User";
-let sessionCode = Math.random().toString(36).substring(2, 8);
-alert(`Your session code is: ${sessionCode}\nShare this with a friend to link accounts.`);
-
-/* ---------- PEER ---------- */
+let username = prompt("Pick your username") || "User";
 const peer = new Peer(username);
+
+let friends = [];
+let currentFriend = null;
 let conn = null;
 let call = null;
 let localStream = null;
 
-/* ---------- FRIENDS SYSTEM ---------- */
-let friends = [];
-
+/* ---------- FRIENDS ---------- */
 function isFriend(name) {
-  return friends.some(f => f.username === name);
+  return friends.some(f => f === name);
 }
 
 function renderFriends() {
-  const container = document.getElementById("friends");
-  container.innerHTML = "";
-  friends.forEach(friend => {
+  const div = document.getElementById("friends");
+  div.innerHTML = "";
+  friends.forEach(name => {
     const btn = document.createElement("button");
-    btn.className = "friend-btn";
-    btn.textContent = friend.username;
-    btn.onclick = () => startCallTo(friend.username);
-    container.appendChild(btn);
+    btn.className = "friend-btn" + (name === currentFriend ? " active" : "");
+    btn.textContent = name;
+    btn.onclick = () => selectFriend(name);
+    div.appendChild(btn);
   });
 }
 
+function selectFriend(name) {
+  currentFriend = name;
+  renderFriends();
+  addMessage("System", `Selected ${name}`, false);
+}
+
 window.addFriend = () => {
-  const code = prompt("Enter your friend's session code:");
-  if (!code) return;
-
-  const friendName = prompt("Enter your friend's username (peer ID):");
-  if (!friendName) return;
-
-  if (!friends.find(f => f.sessionCode === code)) {
-    friends.push({ username: friendName, sessionCode: code });
-    renderFriends();
-    alert(`Friend ${friendName} linked!`);
-  }
+  const name = prompt("Friend username (peer ID)");
+  if (!name || isFriend(name)) return;
+  friends.push(name);
+  renderFriends();
 };
 
-renderFriends();
-
 /* ---------- MEDIA ---------- */
-async function startMedia(video = true) {
+async function startMedia() {
   if (!localStream) {
-    localStream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     document.getElementById("myVideo").srcObject = localStream;
   }
 }
 
-function showVideos(show) {
-  document.getElementById("videos").style.display = show ? "flex" : "none";
-}
-
-/* ---------- CONNECTIONS ---------- */
+/* ---------- PEER EVENTS ---------- */
 peer.on("connection", c => {
   if (!isFriend(c.peer)) {
     c.close();
     return;
   }
-
   conn = c;
+  currentFriend = c.peer;
+  renderFriends();
+
   c.on("data", d => {
-    if (typeof d === "object" && d.user && d.text) {
-      addMessage(d.user, d.text, false);
-    }
+    addMessage(d.user, d.text, false);
   });
 });
 
@@ -207,9 +184,12 @@ peer.on("call", async incoming => {
     return;
   }
 
-  await startMedia(true);
+  currentFriend = incoming.peer;
+  renderFriends();
+
+  await startMedia();
   incoming.answer(localStream);
-  showVideos(true);
+  document.getElementById("videos").style.display = "flex";
 
   incoming.on("stream", s => {
     document.getElementById("friendVideo").srcObject = s;
@@ -217,48 +197,32 @@ peer.on("call", async incoming => {
 });
 
 /* ---------- CALL ---------- */
-async function startCallTo(friendName) {
-  if (!isFriend(friendName)) {
-    alert("You can only message or call friends.");
+window.startCall = async () => {
+  if (!currentFriend) {
+    alert("Select a friend first");
     return;
   }
 
-  conn = peer.connect(friendName, { metadata: { name: username } });
+  await startMedia();
+  call = peer.call(currentFriend, localStream);
 
-  conn.on("open", () => {
-    addMessage("System", `Connected to ${friendName}`, false);
-  });
-
-  conn.on("data", d => {
-    if (typeof d === "object" && d.user && d.text) {
-      addMessage(d.user, d.text, false);
-    }
-  });
-
-  await startMedia(true);
-  call = peer.call(friendName, localStream);
   call.on("stream", s => {
     document.getElementById("friendVideo").srcObject = s;
   });
 
-  showVideos(true);
-}
-
-window.startCall = () => {
-  const friendName = prompt("Enter friend's username (peer ID):");
-  if (!friendName) return;
-  startCallTo(friendName);
+  document.getElementById("videos").style.display = "flex";
 };
 
-/* ---------- END CALL ---------- */
 window.endCall = () => {
   if (call) call.close();
-  if (conn) conn.close();
-  if (localStream) localStream.getTracks().forEach(track => track.stop());
   call = null;
-  conn = null;
-  localStream = null;
-  showVideos(false);
+
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+
+  document.getElementById("videos").style.display = "none";
 };
 
 /* ---------- CHAT ---------- */
@@ -267,9 +231,17 @@ window.sendMessage = () => {
   const text = input.value.trim();
   if (!text) return;
 
-  if (!conn || !isFriend(conn.peer)) {
-    alert("You can only message friends.");
+  if (!currentFriend || !isFriend(currentFriend)) {
+    alert("Select a friend first");
     return;
+  }
+
+  // 🔑 auto-connect data channel if needed
+  if (!conn || conn.peer !== currentFriend || !conn.open) {
+    conn = peer.connect(currentFriend);
+    conn.on("data", d => {
+      addMessage(d.user, d.text, false);
+    });
   }
 
   conn.send({ user: username, text });
@@ -286,7 +258,7 @@ function addMessage(user, text, mine) {
     document.getElementById("chat-container").scrollHeight;
 }
 
-/* ---------- ENTER KEY SEND ---------- */
+/* ---------- ENTER ---------- */
 document.getElementById("message").addEventListener("keydown", e => {
   if (e.key === "Enter") sendMessage();
 });
