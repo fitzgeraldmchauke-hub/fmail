@@ -35,7 +35,7 @@ header {
   gap: 10px;
 }
 
-/* Message bubble fixes */
+/* ✅ FIXED MESSAGE TEXT UI */
 .message {
   background: white;
   padding: 10px 15px;
@@ -60,6 +60,7 @@ header {
   border-top: 1px solid #ddd;
 }
 
+/* ✅ FIXED INPUT TEXT FEEL */
 #message {
   flex: 1;
   padding: 12px;
@@ -252,7 +253,7 @@ window.endCall = () => {
   showVideos(false);
 };
 
-/* ---------- CHAT ---------- */
+/* ---------- CHAT (FIXED) ---------- */
 window.sendMessage = () => {
   const input = document.getElementById("message");
   const text = input.value.trim();
@@ -263,6 +264,7 @@ window.sendMessage = () => {
     return;
   }
 
+  // auto-connect data channel if needed
   if (!conn || conn.peer !== currentFriend || !conn.open) {
     conn = peer.connect(currentFriend);
     conn.on("data", d => {
@@ -284,6 +286,7 @@ function addMessage(user, text, mine) {
     document.getElementById("chat-container").scrollHeight;
 }
 
+/* ---------- ENTER ---------- */
 document.getElementById("message").addEventListener("keydown", e => {
   if (e.key === "Enter") sendMessage();
 });
